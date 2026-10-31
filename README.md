@@ -31,6 +31,22 @@ code_reviewer\.venv\Scripts\python.exe -m streamlit run app.py
 
 Open the local URL printed by Streamlit. Static review features are available without provider credentials.
 
+## Deploy to Streamlit Community Cloud
+
+1. Create a new app from the `thilak004/CodeHeal` GitHub repository.
+2. Select the `main` branch and set the main file path to `app.py`.
+3. Optionally choose an available `*.streamlit.app` URL, then deploy.
+
+The root `requirements.txt` installs the app's pinned dependencies from `code_reviewer/requirements.txt`. To enable AI features, add the following under the app's **Advanced settings → Secrets**, replacing the placeholder with a newly rotated key:
+
+```toml
+LLM_PROVIDER = "groq"
+GROQ_API_KEY = "your_groq_api_key"
+GROQ_MODEL = "openai/gpt-oss-120b"
+```
+
+You can instead choose `ollama` or `claude` and provide their corresponding settings from [`code_reviewer/.env.example`](code_reviewer/.env.example). Static review works without provider secrets. Never commit API keys or `.streamlit/secrets.toml`.
+
 ## Configuration
 
 Set `LLM_PROVIDER` to `groq`, `ollama`, or `claude` in `code_reviewer/.env`, then configure the matching settings:

@@ -21,3 +21,4 @@ venv/
 .claude/
 .freebuff/
 .vscode/
+.streamlit/secrets.toml
