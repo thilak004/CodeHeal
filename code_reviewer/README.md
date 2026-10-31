@@ -79,23 +79,6 @@ streamlit run app.py
 
 Python 3.9+ is supported. On Windows PowerShell, use `./.venv/Scripts/Activate.ps1` if script execution policy permits it, or invoke `.venv/Scripts/python.exe` directly.
 
-## Deploy to Streamlit Community Cloud
-
-Create a new app from the `thilak004/CodeHeal` GitHub repository and select:
-
-- **Branch:** `main`
-- **Main file path:** `app.py`
-
-The root `requirements.txt` installs the pinned dependencies from this folder's `requirements.txt`. In **Advanced settings → Secrets**, add the credentials for the provider you want to use. For Groq:
-
-```toml
-LLM_PROVIDER = "groq"
-GROQ_API_KEY = "your_groq_api_key"
-GROQ_MODEL = "openai/gpt-oss-120b"
-```
-
-You can instead configure Ollama or Claude using the corresponding environment-variable names below. Static review features work without provider credentials. Never commit API keys or `.streamlit/secrets.toml`.
-
 ## Configuration
 
 Copy `.env.example` to `.env` and set only the provider you intend to use:
