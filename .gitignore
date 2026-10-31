@@ -1,0 +1,23 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local data and runtime artifacts
+*.sqlite
+*.sqlite3
+*.db
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Machine-specific editor and agent configuration
+.claude/
+.freebuff/
+.vscode/
