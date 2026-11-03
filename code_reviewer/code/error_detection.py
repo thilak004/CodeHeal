@@ -102,19 +102,18 @@ def _detect_naming_errors(lines: list[str], language: str) -> list[dict[str, Any
     if language == "python":
         # Check for CamelCase functions (should be snake_case)
         for line_number, line in enumerate(lines, 1):
-            if re.search(r"def\s+([a-z]+[A-Z])\w*\s*\(", line):
-                match = re.search(r"def\s+([a-z]+[A-Z])\w*\s*\(", line)
-                if match:
-                    func_name = match.group(1)
-                    findings.append(
-                        _finding(
-                            "PYNAM001",
-                            f"Function '{func_name}' uses CamelCase; Python prefers snake_case.",
-                            line_number,
-                            "warning",
-                            "Rename to snake_case (e.g., my_function).",
-                        )
+            match = re.search(r"def\s+([a-z]+[A-Z]\w*)\s*\(", line)
+            if match:
+                func_name = match.group(1)
+                findings.append(
+                    _finding(
+                        "PYNAM001",
+                        f"Function '{func_name}' uses CamelCase; Python prefers snake_case.",
+                        line_number,
+                        "warning",
+                        "Rename to snake_case (e.g., my_function).",
                     )
+                )
 
     elif language in {"java", "csharp"}:
         # Check for snake_case class names (should be CamelCase)
@@ -262,7 +261,7 @@ def _detect_python_errors(source: str, lines: list[str]) -> list[dict[str, Any]]
         # Detect missing colons after control structures
         if re.match(r"^(if|elif|else|for|while|def|class|try|except|finally|with)\b", stripped):
             if not stripped.endswith(":") and not stripped.endswith("\\"):
-                if "(" in stripped and not ")" in stripped:
+                if "(" in stripped and ")" not in stripped:
                     continue  # Multi-line statement
                 findings.append(
                     _finding(

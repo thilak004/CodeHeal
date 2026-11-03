@@ -21,7 +21,10 @@ def calculate_quality_score(
     components["syntax"] = 100 if syntax_ok is True else 0 if syntax_ok is False else None
 
     ruff_count = _issue_count(ruff_report)
-    components["ruff"] = max(0, 100 - min(100, ruff_count * 10)) if ruff_count is not None else None
+    if ruff_count is not None:
+        components["ruff"] = max(0, 100 - min(100, ruff_count * 10))
+    else:
+        components["ruff"] = None
 
     if security_findings is None:
         components["security"] = None

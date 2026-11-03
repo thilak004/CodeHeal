@@ -22,7 +22,11 @@ def _local_findings(source: str, mode: str, language: str | None = "python") -> 
         findings.extend(scan_security(source))
     # Add common error detection for all languages and modes
     if language:
-        findings.extend(detect_common_errors(source, language))
+        try:
+            findings.extend(detect_common_errors(source, language))
+        except Exception as exc:
+            import sys
+            print(f"Error detecting common errors: {exc}", file=sys.stderr)
     return findings
 
 

@@ -22,3 +22,21 @@ venv/
 .freebuff/
 .vscode/
 .streamlit/secrets.toml
+
+# Reports and temporary documentation
+*BUG_FIX*.md
+*BUG_FIXES*.md
+*FINAL_*.md
+*ERROR_DETECTION*.md
+*_REPORT*.md
+*_SUMMARY*.md
+audit_*.md
+findings_*.md
+debug_*.txt
+*.audit
+.audit/
+
+# Generated reports from code review sessions
+FINAL_BUG_FIX_REPORT.md
+BUG_FIXES_SUMMARY.md
+ERROR_DETECTION_ENHANCEMENTS.md

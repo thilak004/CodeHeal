@@ -147,7 +147,7 @@ def create_provider(
             raise RuntimeError("Claude API key is not set (ANTHROPIC_API_KEY).")
         return ClaudeProvider(
             _claude_client(claude_factory),
-            os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"),
+            os.getenv("ANTHROPIC_MODEL", "claude-opus-4-1"),
             _max_tokens(),
         )
     raise ValueError("Unsupported provider. Choose 'groq', 'ollama', or 'claude'.")
