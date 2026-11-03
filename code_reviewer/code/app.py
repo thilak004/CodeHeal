@@ -24,6 +24,11 @@ from tools import run_ruff
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
+# Load from Streamlit secrets for deployed apps
+for key in ["LLM_PROVIDER", "GROQ_API_KEY", "GROQ_MODEL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "OLLAMA_URL", "OLLAMA_MODEL"]:
+    if key in st.secrets and not os.getenv(key):
+        os.environ[key] = str(st.secrets[key])
+
 st.set_page_config(page_title="AI Code Reviewer", layout="wide", page_icon=":material/bug_report:")
 
 MAX_UPLOAD_BYTES = 512 * 1024
