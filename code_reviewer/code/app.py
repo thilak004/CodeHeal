@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from agent import explain_proposal, fix_code
 from assistant import ask_assistant
+from complexity import calculate_code_metrics
 from detector import detect_ai_code, humanize_code
 from github_integration import fetch_pull_request_diff, prepare_local_review
 from history import clear_history, delete_review, list_reviews, save_review
@@ -116,6 +117,94 @@ def _show_score(score: dict | None) -> None:
         )
 
 
+def _show_code_metrics(metrics_result: dict | None) -> None:
+    """Display code complexity and metrics analysis."""
+    if not metrics_result or metrics_result.get("status") != "success":
+        status = metrics_result.get("status", "error") if metrics_result else "error"
+        message = metrics_result.get("message", "Metrics analysis unavailable.") if metrics_result else "Metrics analysis unavailable."
+        st.warning(f"Code metrics: {message}", icon=":material/warning:")
+        return
+
+    st.subheader("Code Metrics Analysis")
+    metrics = metrics_result.get("metrics", {})
+
+    # Display main metrics as columns
+    col1, col2, col3, col4 = st.columns(4)
+
+    cc = metrics.get("cyclomatic_complexity", {})
+    with col1:
+        status_icon = "🟢" if cc.get("status") == "low" else "🟡" if cc.get("status") == "moderate" else "🔴"
+        st.metric("Cyclomatic Complexity", cc.get("value", "N/A"), status_icon)
+
+    nesting = metrics.get("max_nesting_depth", {})
+    with col2:
+        status_icon = "🟢" if nesting.get("status") == "good" else "🟡" if nesting.get("status") == "warning" else "🔴"
+        st.metric("Max Nesting Depth", nesting.get("value", "N/A"), status_icon)
+
+    avg_func = metrics.get("average_function_length", {})
+    with col3:
+        status_icon = "🟢" if avg_func.get("status") == "good" else "🟡" if avg_func.get("status") == "warning" else "🔴"
+        st.metric("Avg Function Length", f"{avg_func.get('value', 'N/A')} lines", status_icon)
+
+    maint = metrics.get("maintainability_index", {})
+    with col4:
+        status_icon = "🟢" if maint.get("status") in {"excellent", "good"} else "🟡" if maint.get("status") == "moderate" else "🔴"
+        st.metric("Maintainability Index", f"{maint.get('value', 'N/A')}/100", status_icon)
+
+    # Lines of code
+    st.markdown("**Lines of Code:**")
+    lines = metrics.get("lines", {})
+    lines_col1, lines_col2, lines_col3 = st.columns(3)
+    lines_col1.metric("Total Lines", lines.get("total", "N/A"))
+    lines_col2.metric("Code Lines", lines.get("code", "N/A"))
+    lines_col3.metric("Comments", lines.get("comments", "N/A"))
+
+    # Structure info
+    st.markdown("**Code Structure:**")
+    struct_col1, struct_col2, struct_col3 = st.columns(3)
+    struct_col1.metric("Functions", metrics.get("function_count", "N/A"))
+    struct_col2.metric("Classes", metrics.get("class_count", "N/A"))
+    comment_ratio = metrics.get("comment_ratio", {})
+    struct_col3.metric("Comment Ratio", f"{comment_ratio.get('value', 'N/A')}%")
+
+    # Detailed metrics descriptions
+    with st.expander("📊 Detailed Metrics"):
+        st.markdown("**Cyclomatic Complexity**")
+        st.write(cc.get("description", ""))
+        st.info("💡 Measures decision points in code. Lower is better. Aim for < 10.")
+
+        st.markdown("**Maximum Nesting Depth**")
+        st.write(nesting.get("description", ""))
+        st.info("💡 Deep nesting makes code hard to understand. Keep ≤ 4 levels.")
+
+        st.markdown("**Average Function Length**")
+        st.write(avg_func.get("description", ""))
+        st.info("💡 Shorter functions are easier to understand and test. Aim for < 50 lines.")
+
+        st.markdown("**Maintainability Index**")
+        st.write(maint.get("description", ""))
+        st.info("💡 Combines complexity, lines of code, and comments. 0-100 score.")
+
+        st.markdown("**Comment Ratio**")
+        st.write(comment_ratio.get("description", ""))
+        st.info("💡 Balance between code and comments. Aim for 10-20%.")
+
+    # Recommendations
+    summary = metrics_result.get("summary", {})
+    recommendations = summary.get("recommendations", [])
+
+    if recommendations:
+        st.markdown("**Recommendations:**")
+        for i, rec in enumerate(recommendations, 1):
+            if "good" in rec.lower() or "keep" in rec.lower():
+                st.success(f"✓ {rec}")
+            elif "priority" in rec.lower() or "poor" in rec.lower():
+                st.error(f"⚠ {rec}")
+            else:
+                st.warning(f"→ {rec}")
+
+
+
 def _show_findings(findings: list[dict]) -> None:
     if not findings:
         st.success("No deterministic findings were reported.")
@@ -193,6 +282,7 @@ MODE_LABELS = {
     "fix_syntax": "Fix syntax",
     "ai_detector": "AI Code Detector",
     "assistant": "Assistant",
+    "code_metrics": "Code Metrics",
     "review_quality": "Quality review",
     "security": "Security review",
     "refactor": "Refactor",
@@ -496,6 +586,59 @@ if mode == "assistant":
                 st.success("Proposal approved and placed in the editor. Run a review before downloading it.")
         else:
             st.error(assistant_result.get("error", "The assistant could not complete the request."))
+    st.stop()
+
+if mode == "code_metrics":
+    st.header("Code Complexity & Metrics Analysis")
+    st.caption("Analyze code complexity, maintainability, and structural metrics (Python support)")
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Calculating code metrics..."):
+            metrics_result = calculate_code_metrics(source, detected_language)
+            st.session_state["metrics_result"] = metrics_result
+            st.session_state["upload_identity"] = upload_id
+
+    metrics_result = st.session_state.get("metrics_result")
+    if metrics_result:
+        _show_code_metrics(metrics_result)
+
+        # Export button
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "Export metrics as JSON",
+                data=json.dumps(metrics_result, indent=2),
+                file_name=f"metrics_{_safe_filename(source_filename)}.json",
+                mime="application/json",
+            )
+        with col2:
+            # Create a simple text report
+            report_text = f"""Code Metrics Report
+Generated for: {source_filename}
+
+COMPLEXITY METRICS
+- Cyclomatic Complexity: {metrics_result.get('metrics', {}).get('cyclomatic_complexity', {}).get('value')}
+- Max Nesting Depth: {metrics_result.get('metrics', {}).get('max_nesting_depth', {}).get('value')}
+- Maintainability Index: {metrics_result.get('metrics', {}).get('maintainability_index', {}).get('value')}/100
+
+CODE STRUCTURE
+- Total Lines: {metrics_result.get('metrics', {}).get('lines', {}).get('total')}
+- Code Lines: {metrics_result.get('metrics', {}).get('lines', {}).get('code')}
+- Comment Lines: {metrics_result.get('metrics', {}).get('lines', {}).get('comments')}
+- Functions: {metrics_result.get('metrics', {}).get('function_count')}
+- Classes: {metrics_result.get('metrics', {}).get('class_count')}
+
+RECOMMENDATIONS
+"""
+            for rec in metrics_result.get('summary', {}).get('recommendations', []):
+                report_text += f"- {rec}\n"
+
+            st.download_button(
+                "Export metrics as text",
+                data=report_text,
+                file_name=f"metrics_{_safe_filename(source_filename)}.txt",
+                mime="text/plain",
+            )
     st.stop()
 
 if mode == "project":
