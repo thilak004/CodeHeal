@@ -655,6 +655,9 @@ elif mode == "fix_syntax" and result is not None:
             f"Proposal validation: {language_check.get('tool', 'built-in')} — "
             f"{check_status}"
         )
+        if language_check.get("findings"):
+            st.subheader("Validation findings")
+            _show_findings(language_check.get("findings", []))
 
     if result.get("diff"):
         with st.expander("Review the diff", expanded=True):

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from error_detection import detect_common_errors
 from languages import detect_language, language_label
 from multilang import candidate_is_acceptable, check_source
 from prompts import REVIEW_PROMPT
@@ -19,6 +20,9 @@ def _local_findings(source: str, mode: str, language: str | None = "python") -> 
     findings: list[dict[str, Any]] = []
     if language == "python" and mode in {"security", "review_quality"}:
         findings.extend(scan_security(source))
+    # Add common error detection for all languages and modes
+    if language:
+        findings.extend(detect_common_errors(source, language))
     return findings
 
 

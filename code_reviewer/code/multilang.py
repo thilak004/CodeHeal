@@ -483,6 +483,19 @@ def check_source(source: str, filename: str) -> dict[str, Any]:
         result = _result("clean" if python_valid else "findings", python_message, None if python_valid else [_finding("PY001", python_message, 0)])
     else:
         result = _external_check(language, source)
+
+    # Add advanced error detection findings
+    try:
+        from error_detection import detect_common_errors
+        additional_findings = detect_common_errors(source, language)
+        if additional_findings:
+            existing = result.get("findings", []) or []
+            result["findings"] = existing + additional_findings
+            if result.get("status") == "clean" and additional_findings:
+                result["status"] = "findings"
+    except Exception:
+        pass  # If advanced detection fails, continue with basic checks
+
     return {
         **result,
         "language": language,

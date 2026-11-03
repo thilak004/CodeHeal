@@ -7,8 +7,8 @@ LANGUAGE_SPECS = {
     "python": {"label": "Python", "extensions": (".py",), "streamlit": "python"},
     "javascript": {"label": "JavaScript", "extensions": (".js", ".jsx"), "streamlit": "javascript"},
     "java": {"label": "Java", "extensions": (".java",), "streamlit": "java"},
-    "c": {"label": "C", "extensions": (".c", ".h"), "streamlit": "c"},
-    "cpp": {"label": "C++", "extensions": (".cc", ".cpp", ".cxx", ".hpp"), "streamlit": "cpp"},
+    "c": {"label": "C", "extensions": (".c",), "streamlit": "c"},
+    "cpp": {"label": "C++", "extensions": (".cc", ".cpp", ".cxx", ".h", ".hpp"), "streamlit": "cpp"},
     "csharp": {"label": "C#", "extensions": (".cs",), "streamlit": "csharp"},
 }
 
