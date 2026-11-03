@@ -12,12 +12,15 @@ from dotenv import load_dotenv
 
 from agent import explain_proposal, fix_code
 from assistant import ask_assistant
+from code_formatter import format_code, get_formatting_stats
 from complexity import calculate_code_metrics
 from dependency_analysis import analyze_dependencies
 from detector import detect_ai_code, humanize_code
+from documentation_generator import generate_documentation
 from github_integration import fetch_pull_request_diff, prepare_local_review
 from history import clear_history, delete_review, list_reviews, save_review
 from languages import detect_language, language_label, streamlit_language
+from performance_analysis import analyze_performance
 from project import analyze_project_zip, inspect_project_zip, read_project_context
 from review import review_source
 from sandbox import run_pytest_sandbox
@@ -302,6 +305,194 @@ def _show_dependency_analysis(dep_result: dict | None) -> None:
                 st.warning(f"→ {rec}")
 
 
+def _show_performance_analysis(perf_result: dict | None) -> None:
+    """Display performance analysis results."""
+    if not perf_result:
+        st.info("No performance analysis results available.")
+        return
+
+    status = perf_result.get("status", "unknown")
+    status_icon = "🚨" if status == "critical" else "⚠️" if status == "warning" else "ℹ️" if status == "info" else "✓"
+
+    st.subheader(f"{status_icon} Performance Analysis")
+
+    summary = perf_result.get("summary", {})
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Total Issues", summary.get("total_issues", 0))
+    with col2:
+        st.metric("🚨 Critical", summary.get("critical", 0), delta_color="off" if summary.get("critical", 0) == 0 else "inverse")
+    with col3:
+        st.metric("⚠️ Warnings", summary.get("warnings", 0), delta_color="off" if summary.get("warnings", 0) == 0 else "inverse")
+    with col4:
+        st.metric("💡 Opportunities", summary.get("optimization_opportunities", 0))
+
+    # Critical Issues
+    critical_issues = perf_result.get("issues", {}).get("critical", [])
+    if critical_issues:
+        st.markdown("### 🚨 Critical Performance Issues")
+        for issue in critical_issues:
+            with st.expander(f"Line {issue.get('line')}: {issue.get('type', 'issue')}"):
+                st.error(f"**Message:** {issue.get('message')}")
+                st.write(f"**Complexity:** {issue.get('complexity', 'N/A')}")
+                st.info(f"**Suggestion:** {issue.get('suggestion')}")
+
+    # Warnings
+    warning_issues = perf_result.get("issues", {}).get("warnings", [])
+    if warning_issues:
+        st.markdown("### ⚠️ Performance Warnings")
+        for issue in warning_issues:
+            st.warning(f"**Line {issue.get('line')}:** {issue.get('message')}\n\n{issue.get('suggestion')}")
+
+    # Database Issues
+    db_issues = perf_result.get("database_issues", [])
+    if db_issues:
+        st.markdown("### 🔴 Database Performance Issues")
+        for issue in db_issues:
+            st.error(f"**Line {issue.get('line')}:** {issue.get('message')}\n\n{issue.get('suggestion')}")
+
+    # Caching Opportunities
+    caching = perf_result.get("caching_opportunities", [])
+    if caching:
+        st.markdown("### 💡 Caching Opportunities")
+        for opp in caching:
+            st.info(f"{opp.get('message')}\n\n{opp.get('suggestion')}")
+
+    # Recommendations
+    recommendations = perf_result.get("recommendations", [])
+    if recommendations:
+        st.markdown("### 📋 Recommendations")
+        for rec in recommendations:
+            if "critical" in rec.lower() or "immediately" in rec.lower():
+                st.error(f"🚨 {rec}")
+            elif "N+1" in rec:
+                st.error(f"🔴 {rec}")
+            elif "good" in rec.lower() or "✓" in rec:
+                st.success(rec)
+            else:
+                st.warning(f"⚠️ {rec}")
+
+
+def _show_documentation_generator(doc_result: dict | None) -> None:
+    """Display generated documentation."""
+    if not doc_result:
+        st.info("No documentation generated.")
+        return
+
+    status = doc_result.get("status", "unknown")
+    if status == "error" or status == "unsupported":
+        st.warning(doc_result.get("message", "Documentation generation unavailable"))
+        return
+
+    st.subheader("📚 Generated Documentation")
+
+    summary = doc_result.get("summary", {})
+    language = doc_result.get("language", "unknown").title()
+    style = doc_result.get("style", "default")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Language", language)
+    with col2:
+        st.metric("Style", style.title() if style else "Default")
+    with col3:
+        st.metric("Missing Docs", summary.get("missing_docstrings", 0))
+
+    # Functions
+    functions = doc_result.get("functions", [])
+    if functions:
+        st.markdown("### 📝 Functions/Methods")
+        for func in functions:
+            with st.expander(f"📌 {func.get('name')} (Line {func.get('line', '?')})"):
+                st.code(func.get("docstring", ""), language="python" if "python" in language.lower() else "javascript")
+                if func.get("params"):
+                    st.write(f"**Parameters:** {', '.join(func['params'])}")
+
+    # Classes
+    classes = doc_result.get("classes", [])
+    if classes:
+        st.markdown("### 🏗️ Classes")
+        for cls in classes:
+            with st.expander(f"🏗️ {cls.get('name')} (Line {cls.get('line', '?')})"):
+                st.code(cls.get("docstring", ""), language="python" if "python" in language.lower() else "java")
+
+    # Recommendations
+    recommendations = doc_result.get("recommendations", [])
+    if recommendations:
+        st.markdown("### 💡 Recommendations")
+        for rec in recommendations:
+            if "need" in rec.lower() or "generated" in rec.lower():
+                st.warning(f"📝 {rec}")
+            elif "good" in rec.lower() or "✓" in rec:
+                st.success(rec)
+            else:
+                st.info(f"💡 {rec}")
+
+
+def _show_code_formatter(fmt_result: dict | None) -> None:
+    """Display code formatting results."""
+    if not fmt_result:
+        st.info("No formatting results available.")
+        return
+
+    status = fmt_result.get("status", "unknown")
+    status_icon = "✓" if status == "clean" else "🎨"
+
+    st.subheader(f"{status_icon} Code Formatter")
+    st.caption(f"Style Guide: {fmt_result.get('style_guide', 'default')}")
+
+    if status == "clean":
+        st.success("✓ Code is already well-formatted!")
+        return
+
+    # Show formatting statistics
+    stats = get_formatting_stats(fmt_result.get("original_code", ""), fmt_result.get("formatted_code", ""))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Lines", stats.get("total_lines", 0))
+    with col2:
+        st.metric("Lines Changed", stats.get("lines_changed", 0))
+    with col3:
+        st.metric("Quality Score", f"{stats.get('formatting_score', 0):.1f}%")
+
+    # Show before/after
+    tab1, tab2, tab3 = st.tabs(["📝 Changes", "Original", "Formatted"])
+
+    with tab1:
+        changes = fmt_result.get("changes", [])
+        if changes:
+            st.markdown("### Line-by-Line Changes")
+            for change in changes[:20]:  # Show first 20 changes
+                with st.expander(f"Line {change['line']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Original:**")
+                        st.code(change["original"], language="text")
+                    with col2:
+                        st.write("**Formatted:**")
+                        st.code(change["formatted"], language="text")
+
+            if len(changes) > 20:
+                st.info(f"... and {len(changes) - 20} more changes")
+
+    with tab2:
+        original = fmt_result.get("original_code", "")[:2000]
+        st.code(original, language="python")
+
+    with tab3:
+        formatted = fmt_result.get("formatted_code", "")[:2000]
+        st.code(formatted, language="python")
+
+    # Download button
+    st.download_button(
+        "📥 Download Formatted Code",
+        data=fmt_result.get("formatted_code", ""),
+        file_name=f"formatted_{_safe_filename(source_filename)}",
+        mime="text/plain",
+    )
+
+
 def _show_findings(findings: list[dict]) -> None:
     if not findings:
         st.success("No deterministic findings were reported.")
@@ -381,6 +572,9 @@ MODE_LABELS = {
     "assistant": "Assistant",
     "code_metrics": "Code Metrics",
     "dependency_analysis": "Dependency Analysis",
+    "performance_analysis": "Performance Analysis",
+    "documentation_generator": "Documentation Generator",
+    "code_formatter": "Code Formatter",
     "review_quality": "Quality review",
     "security": "Security review",
     "refactor": "Refactor",
@@ -795,6 +989,74 @@ SECURITY ISSUES
                 file_name=f"dependencies_{_safe_filename(source_filename)}.txt",
                 mime="text/plain",
             )
+    st.stop()
+
+if mode == "performance_analysis":
+    st.header("Performance Analysis")
+    st.caption("Detect bottlenecks, time complexity issues, and optimization opportunities")
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Analyzing performance..."):
+            perf_result = analyze_performance(source, detected_language)
+            st.session_state["perf_result"] = perf_result
+            st.session_state["upload_identity"] = upload_id
+
+    perf_result = st.session_state.get("perf_result")
+    if perf_result:
+        _show_performance_analysis(perf_result)
+
+        # Export button
+        st.download_button(
+            "📥 Export analysis as JSON",
+            data=json.dumps(perf_result, indent=2),
+            file_name=f"performance_{_safe_filename(source_filename)}.json",
+            mime="application/json",
+        )
+    st.stop()
+
+if mode == "documentation_generator":
+    st.header("Documentation Generator")
+    st.caption("Auto-generate docstrings and API documentation")
+
+    # Language-specific style selector
+    if detected_language == "python":
+        doc_style = st.selectbox("Documentation style", ["google", "numpy", "default"], key="doc_style")
+    else:
+        doc_style = "default"
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Generating documentation..."):
+            doc_result = generate_documentation(source, detected_language, doc_style)
+            st.session_state["doc_result"] = doc_result
+            st.session_state["upload_identity"] = upload_id
+
+    doc_result = st.session_state.get("doc_result")
+    if doc_result:
+        _show_documentation_generator(doc_result)
+
+        # Export button
+        st.download_button(
+            "📥 Export documentation as JSON",
+            data=json.dumps(doc_result, indent=2),
+            file_name=f"documentation_{_safe_filename(source_filename)}.json",
+            mime="application/json",
+        )
+    st.stop()
+
+if mode == "code_formatter":
+    st.header("Code Formatter")
+    st.caption("Format code according to language style guides")
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Formatting code..."):
+            fmt_result = format_code(source, detected_language)
+            fmt_result["original_code"] = source
+            st.session_state["fmt_result"] = fmt_result
+            st.session_state["upload_identity"] = upload_id
+
+    fmt_result = st.session_state.get("fmt_result")
+    if fmt_result:
+        _show_code_formatter(fmt_result)
     st.stop()
 
 if mode == "project":
