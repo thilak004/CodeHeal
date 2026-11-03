@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from agent import explain_proposal, fix_code
 from assistant import ask_assistant
 from complexity import calculate_code_metrics
+from dependency_analysis import analyze_dependencies
 from detector import detect_ai_code, humanize_code
 from github_integration import fetch_pull_request_diff, prepare_local_review
 from history import clear_history, delete_review, list_reviews, save_review
@@ -204,6 +205,102 @@ def _show_code_metrics(metrics_result: dict | None) -> None:
                 st.warning(f"→ {rec}")
 
 
+def _show_dependency_analysis(dep_result: dict | None) -> None:
+    """Display dependency analysis results."""
+    if not dep_result:
+        st.info("No dependency analysis results available.")
+        return
+
+    status = dep_result.get("status", "unknown")
+    status_icon = "🔴" if status == "critical" else "🟡" if status == "warning" else "🟢" if status == "clean" else "ℹ"
+
+    st.subheader(f"{status_icon} Dependency Analysis")
+    st.caption(f"Format: {dep_result.get('source_format', 'auto-detected')}")
+
+    # Summary metrics
+    summary = dep_result.get("summary", {})
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Total Dependencies", summary.get("total_dependencies", 0))
+
+    with col2:
+        critical = summary.get("critical_issues", 0)
+        st.metric("🚨 Critical Issues", critical, delta_color="off" if critical == 0 else "inverse")
+
+    with col3:
+        outdated = summary.get("outdated_packages", 0)
+        st.metric("📦 Outdated Packages", outdated, delta_color="off" if outdated == 0 else "inverse")
+
+    with col4:
+        unused = summary.get("unused_imports", 0)
+        st.metric("🗑️ Unused Imports", unused, delta_color="off" if unused == 0 else "inverse")
+
+    # Security Issues
+    security_issues = dep_result.get("security_issues", [])
+    if security_issues:
+        st.markdown("### 🔒 Security Issues")
+        for issue in security_issues:
+            with st.expander(f"⚠️ {issue['package']} {issue.get('version', 'unknown')}"):
+                st.error(f"**Issue:** {issue.get('issue', 'Unknown vulnerability')}")
+                st.write(f"**Severity:** {issue.get('severity', 'unknown')}")
+                st.info("Action: Update this package immediately to a patched version")
+
+    # Outdated Packages
+    outdated = dep_result.get("outdated_packages", [])
+    if outdated:
+        st.markdown("### 📦 Outdated Packages")
+        outdated_data = [
+            {
+                "Package": pkg["package"],
+                "Current": pkg.get("current_version", "N/A"),
+                "Recommended": pkg.get("recommended_version", "N/A"),
+            }
+            for pkg in outdated
+        ]
+        st.dataframe(outdated_data, hide_index=True, use_container_width=True)
+
+    # All Dependencies
+    dependencies = dep_result.get("dependencies", [])
+    if dependencies:
+        st.markdown("### 📋 All Dependencies")
+        with st.expander(f"View all {len(dependencies)} dependencies"):
+            dep_data = [
+                {
+                    "Package": dep["name"],
+                    "Version": dep.get("version", "unpinned"),
+                    "Source": dep.get("source", "unknown"),
+                }
+                for dep in dependencies
+            ]
+            st.dataframe(dep_data, hide_index=True, use_container_width=True)
+
+    # Unused Imports
+    unused_imports = dep_result.get("unused_imports", [])
+    if unused_imports:
+        st.markdown("### 🗑️ Unused Imports")
+        for imp in unused_imports:
+            st.warning(f"Line {imp.get('line', '?')}: `{imp['module']}` is imported but not used")
+
+    # Other Issues
+    other_issues = dep_result.get("other_issues", [])
+    if other_issues:
+        st.markdown("### ℹ️ Other Issues")
+        for issue in other_issues:
+            st.info(f"{issue['message']}")
+
+    # Recommendations
+    recommendations = dep_result.get("recommendations", [])
+    if recommendations:
+        st.markdown("### 💡 Recommendations")
+        for rec in recommendations:
+            if "immediately" in rec.lower() or "critical" in rec.lower():
+                st.error(f"🚨 {rec}")
+            elif "good" in rec.lower() or "keep" in rec.lower():
+                st.success(f"✓ {rec}")
+            else:
+                st.warning(f"→ {rec}")
+
 
 def _show_findings(findings: list[dict]) -> None:
     if not findings:
@@ -283,6 +380,7 @@ MODE_LABELS = {
     "ai_detector": "AI Code Detector",
     "assistant": "Assistant",
     "code_metrics": "Code Metrics",
+    "dependency_analysis": "Dependency Analysis",
     "review_quality": "Quality review",
     "security": "Security review",
     "refactor": "Refactor",
@@ -637,6 +735,64 @@ RECOMMENDATIONS
                 "Export metrics as text",
                 data=report_text,
                 file_name=f"metrics_{_safe_filename(source_filename)}.txt",
+                mime="text/plain",
+            )
+    st.stop()
+
+if mode == "dependency_analysis":
+    st.header("Dependency Analysis")
+    st.caption("Analyze external dependencies for security vulnerabilities, outdated packages, and unused imports")
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Analyzing dependencies..."):
+            dep_result = analyze_dependencies(source, detected_language)
+            st.session_state["dep_result"] = dep_result
+            st.session_state["upload_identity"] = upload_id
+
+    dep_result = st.session_state.get("dep_result")
+    if dep_result:
+        _show_dependency_analysis(dep_result)
+
+        # Export button
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "Export analysis as JSON",
+                data=json.dumps(dep_result, indent=2),
+                file_name=f"dependencies_{_safe_filename(source_filename)}.json",
+                mime="application/json",
+            )
+        with col2:
+            # Create a simple text report
+            summary = dep_result.get("summary", {})
+            report_text = f"""Dependency Analysis Report
+Generated for: {source_filename}
+
+SUMMARY
+- Total Dependencies: {summary.get('total_dependencies', 0)}
+- Critical Issues: {summary.get('critical_issues', 0)}
+- Outdated Packages: {summary.get('outdated_packages', 0)}
+- Unused Imports: {summary.get('unused_imports', 0)}
+
+STATUS: {dep_result.get('status', 'unknown').upper()}
+
+SECURITY ISSUES
+"""
+            for issue in dep_result.get("security_issues", []):
+                report_text += f"- {issue['package']} {issue.get('version', 'unknown')}: {issue.get('issue', 'Unknown')}\n"
+
+            report_text += "\nOUTDATED PACKAGES\n"
+            for pkg in dep_result.get("outdated_packages", []):
+                report_text += f"- {pkg['package']}: {pkg.get('current_version')} → {pkg.get('recommended_version')}\n"
+
+            report_text += "\nRECOMMENDATIONS\n"
+            for rec in dep_result.get("recommendations", []):
+                report_text += f"- {rec}\n"
+
+            st.download_button(
+                "Export analysis as text",
+                data=report_text,
+                file_name=f"dependencies_{_safe_filename(source_filename)}.txt",
                 mime="text/plain",
             )
     st.stop()
