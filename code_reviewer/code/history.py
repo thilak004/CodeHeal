@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
+from pathlib import Path
 from typing import Any
 
 
@@ -22,9 +23,14 @@ def _connect(path: str | Path) -> sqlite3.Connection:
             status TEXT NOT NULL,
             score INTEGER,
             approved INTEGER NOT NULL DEFAULT 0,
-            findings_json TEXT NOT NULL
+            findings_json TEXT NOT NULL,
+            coverage_score REAL
         )"""
     )
+    try:
+        connection.execute("ALTER TABLE reviews ADD COLUMN coverage_score REAL")
+    except sqlite3.OperationalError:
+        pass
     connection.commit()
     return connection
 
@@ -38,8 +44,8 @@ def save_review(path: str | Path, record: dict[str, Any]) -> int:
     try:
         cursor = connection.execute(
             """INSERT INTO reviews
-            (filename, mode, source_hash, proposal_hash, status, score, approved, findings_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (filename, mode, source_hash, proposal_hash, status, score, approved, findings_json, coverage_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 record.get("filename", "code.py"),
                 record.get("mode", "review"),
@@ -49,6 +55,7 @@ def save_review(path: str | Path, record: dict[str, Any]) -> int:
                 record.get("score"),
                 int(bool(record.get("approved", False))),
                 json.dumps(record.get("findings", [])),
+                record.get("coverage_score"),
             ),
         )
         connection.commit()

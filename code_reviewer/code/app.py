@@ -25,6 +25,7 @@ from project import analyze_project_zip, inspect_project_zip, read_project_conte
 from review import review_source
 from sandbox import run_pytest_sandbox
 from test_generation import generate_tests
+from test_coverage import analyze_test_coverage, analyze_assertion_quality, generate_test_stubs_for_gaps
 from tools import run_ruff
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -495,6 +496,73 @@ def _show_code_formatter(fmt_result: dict | None) -> None:
     )
 
 
+def _show_test_coverage(coverage_result: dict | None) -> None:
+    """Display test coverage and gap analysis results."""
+    if not coverage_result or coverage_result.get("status") != "success":
+        st.info("No test coverage analysis available.")
+        return
+
+    st.subheader("🧪 Test Coverage & Gap Analysis")
+    summary = coverage_result.get("summary", {})
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Functions", summary.get("total_functions", 0))
+    with col2:
+        st.metric("Covered Functions", summary.get("covered_functions", 0))
+    with col3:
+        st.metric("Uncovered Gaps", summary.get("uncovered_functions", 0))
+    with col4:
+        pct = summary.get("coverage_percentage", 0)
+        status_icon = "🟢" if pct >= 80 else "🟡" if pct >= 50 else "🔴"
+        st.metric("Coverage Ratio", f"{pct}%", status_icon)
+
+    assertion_q = coverage_result.get("assertion_quality", {})
+    if assertion_q and assertion_q.get("status") == "success":
+        st.markdown("### 🛡️ Test Assertion & Mutation Quality")
+        aq1, aq2, aq3 = st.columns(3)
+        aq1.metric("Total Test Functions", assertion_q.get("total_test_functions", 0))
+        aq2.metric("Total Assertions", assertion_q.get("assertion_count", 0))
+        aq3.metric("Assertion Quality Score", f"{assertion_q.get('assertion_quality_score', 0)}/100")
+
+        shallow = assertion_q.get("shallow_tests", [])
+        if shallow:
+            with st.expander(f"⚠️ {len(shallow)} Shallow Test(s) Detected (No Assertions)", expanded=True):
+                for st_item in shallow:
+                    st.warning(f"Line {st_item['line']}: `{st_item['test_name']}` — {st_item['issue']}")
+
+    tab1, tab2 = st.tabs(["⚠️ Coverage Gaps", "✅ Covered Functions"])
+
+    with tab1:
+        uncovered = coverage_result.get("uncovered", [])
+        if uncovered:
+            st.markdown("### Functions Lacking Tests")
+            for func in uncovered:
+                st.warning(f"Line {func['line']}: `{func['name']}` ({func['type']}) has no detected unit test.")
+        else:
+            st.success("✓ No coverage gaps found! All functions have test coverage.")
+
+    with tab2:
+        covered = coverage_result.get("covered", [])
+        if covered:
+            st.markdown("### Covered Functions")
+            for func in covered:
+                st.success(f"Line {func['line']}: `{func['name']}` ({func['type']})")
+        else:
+            st.info("No covered functions detected in this snippet.")
+
+    recommendations = coverage_result.get("recommendations", [])
+    if recommendations:
+        st.markdown("### 📋 Recommendations & Action Items")
+        for rec in recommendations:
+            if "⚠️" in rec or "Aim" in rec:
+                st.warning(rec)
+            elif "✓" in rec or "🌟" in rec:
+                st.success(rec)
+            else:
+                st.info(rec)
+
+
 def _show_findings(findings: list[dict]) -> None:
     if not findings:
         st.success("No deterministic findings were reported.")
@@ -570,6 +638,7 @@ MODE_LABELS = {
     "performance_analysis": "Performance Analysis",
     "documentation_generator": "Documentation Generator",
     "code_formatter": "Code Formatter",
+    "test_coverage": "Test Coverage & Gap Analysis",
     "review_quality": "Quality review",
     "security": "Security review",
     "refactor": "Refactor",
@@ -1088,6 +1157,103 @@ if mode == "code_formatter":
     fmt_result = st.session_state.get("fmt_result")
     if fmt_result:
         _show_code_formatter(fmt_result)
+    st.stop()
+
+if mode == "test_coverage":
+    st.header("Test Coverage & Gap Analysis")
+    st.caption("Analyze function definitions, detect test coverage gaps, inspect test assertion quality, and auto-generate test stubs.")
+
+    test_suite_input = st.text_area("Optional: Paste existing test code / test suite here for precise coverage and assertion quality matching", value="", height=120, help="Paste your test_*.py file or test functions to verify coverage and assertion robustness.")
+
+    if st.session_state.get("upload_identity") != upload_id and uploaded_file is not None:
+        with st.spinner("Analyzing test coverage, gap areas, and assertion quality..."):
+            coverage_result = analyze_test_coverage(
+                source,
+                filename=_safe_filename(source_filename),
+                test_source=test_suite_input if test_suite_input.strip() else None,
+            )
+            assertion_result = analyze_assertion_quality(test_suite_input) if test_suite_input.strip() else {}
+            coverage_result["assertion_quality"] = assertion_result
+
+            st.session_state["coverage_result"] = coverage_result
+            st.session_state["upload_identity"] = upload_id
+
+            try:
+                save_review(
+                    HISTORY_PATH,
+                    {
+                        "filename": _safe_filename(source_filename),
+                        "mode": "test_coverage",
+                        "source": source,
+                        "status": coverage_result.get("status", "unknown"),
+                        "score": int(coverage_result.get("summary", {}).get("coverage_percentage", 0)),
+                        "coverage_score": float(coverage_result.get("summary", {}).get("coverage_percentage", 0)),
+                        "findings": [{"message": rec} for rec in coverage_result.get("recommendations", [])],
+                    },
+                )
+            except Exception:
+                pass
+
+    if st.button("Run Coverage & Quality Analysis", type="primary"):
+        with st.spinner("Analyzing test coverage, gap areas, and assertion quality..."):
+            coverage_result = analyze_test_coverage(
+                source,
+                filename=_safe_filename(source_filename),
+                test_source=test_suite_input if test_suite_input.strip() else None,
+            )
+            assertion_result = analyze_assertion_quality(test_suite_input) if test_suite_input.strip() else {}
+            coverage_result["assertion_quality"] = assertion_result
+
+            st.session_state["coverage_result"] = coverage_result
+
+            try:
+                save_review(
+                    HISTORY_PATH,
+                    {
+                        "filename": _safe_filename(source_filename),
+                        "mode": "test_coverage",
+                        "source": source,
+                        "status": coverage_result.get("status", "unknown"),
+                        "score": int(coverage_result.get("summary", {}).get("coverage_percentage", 0)),
+                        "coverage_score": float(coverage_result.get("summary", {}).get("coverage_percentage", 0)),
+                        "findings": [{"message": rec} for rec in coverage_result.get("recommendations", [])],
+                    },
+                )
+            except Exception:
+                pass
+
+    coverage_result = st.session_state.get("coverage_result")
+    if coverage_result:
+        _show_test_coverage(coverage_result)
+
+        uncovered = coverage_result.get("uncovered", [])
+        if uncovered:
+            st.divider()
+            st.markdown("### 🤖 Automated Test Stub Generator")
+            st.write(f"Generate AI-powered unit test stubs for the {len(uncovered)} uncovered function(s) detected above.")
+            if st.button("Generate Test Stubs for Gaps", type="secondary"):
+                with st.spinner("Generating test stubs using AI..."):
+                    stub_result = generate_test_stubs_for_gaps(source, uncovered, provider_name=provider_name)
+                    st.session_state["stub_result"] = stub_result
+
+            stub_res = st.session_state.get("stub_result")
+            if stub_res:
+                st.success("Test stubs generated successfully!")
+                st.code(stub_res.get("test_stubs", ""), language="python")
+                st.download_button(
+                    "📥 Download Generated Test Stubs",
+                    data=stub_res.get("test_stubs", ""),
+                    file_name=f"test_stubs_{_safe_filename(source_filename)}",
+                    mime="text/plain",
+                )
+
+        st.divider()
+        st.download_button(
+            "📥 Export Coverage & Quality Report as JSON",
+            data=json.dumps(coverage_result, indent=2),
+            file_name=f"test_coverage_{_safe_filename(source_filename)}.json",
+            mime="application/json",
+        )
     st.stop()
 
 if mode == "project":
