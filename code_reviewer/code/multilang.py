@@ -302,11 +302,11 @@ def _fallback_external_check(language: str, source: str, tool: str) -> dict[str,
             if re.search(r"\b(?:if|while|for)\s*\([^)]*$", stripped):
                 findings.append(_finding(f"{language.upper()}003", "Control statement has an unclosed condition.", line_number))
 
-    if language in {"c", "cpp", "java", "csharp"}:
+    if language in {"c", "cpp", "java", "csharp", "javascript", "typescript"}:
         # A method or function signature is closed by a brace, not by a
         # semicolon, so it never misses a terminator. This only holds for the
         # languages whose bodies are brace-delimited.
-        brace_bodied = language in {"c", "cpp", "java", "csharp"}
+        brace_bodied = language in {"c", "cpp", "java", "csharp", "javascript", "typescript"}
         # A statement may be split over several lines, so the parenthesis
         # depth is tracked across lines: a line inside an open parameter list
         # continues the line above it. The depth is counted on the source

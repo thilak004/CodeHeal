@@ -73,6 +73,8 @@ def _initialise_state() -> None:
     st.session_state.setdefault("assistant_source_identity", None)
     st.session_state.setdefault("detector_result", None)
     st.session_state.setdefault("humanize_result", None)
+    st.session_state.setdefault("mode_selected", False)
+    st.session_state.setdefault("selected_mode", "fix_syntax")
 
 
 def _show_ruff_report(title: str, report: dict | None) -> None:
@@ -559,13 +561,6 @@ def _health_panel(result: dict) -> None:
 _initialise_state()
 st.title("AI Code Reviewer")
 
-with st.sidebar:
-    st.header("Settings")
-    provider_options = ["groq", "ollama", "claude"]
-    current_provider = st.session_state["provider_name"] if st.session_state["provider_name"] in provider_options else "groq"
-    provider_name = st.selectbox("AI provider", options=provider_options, index=provider_options.index(current_provider))
-    st.session_state["provider_name"] = provider_name
-
 MODE_LABELS = {
     "fix_syntax": "Fix syntax",
     "ai_detector": "AI Code Detector",
@@ -585,11 +580,47 @@ MODE_LABELS = {
     "history": "History",
 }
 
+
+@st.dialog("🚀 Welcome to AI Code Reviewer - Select Review Mode")
+def _select_mode_dialog():
+    st.markdown("Please choose your preferred review or analysis mode before starting:")
+    selected = st.selectbox(
+        "Review Mode",
+        options=list(MODE_LABELS),
+        format_func=MODE_LABELS.get,
+        key="initial_mode_selection",
+    )
+    st.caption("You can change modes anytime from the sidebar later.")
+    if st.button("Start Code Review", type="primary", use_container_width=True):
+        st.session_state["selected_mode"] = selected
+        st.session_state["mode_selected"] = True
+        st.rerun()
+
+
+_initialise_state()
+st.title("AI Code Reviewer")
+
+if not st.session_state.get("mode_selected", False):
+    _select_mode_dialog()
+
+with st.sidebar:
+    st.header("Settings")
+    provider_options = ["groq", "ollama", "claude"]
+    current_provider = st.session_state["provider_name"] if st.session_state["provider_name"] in provider_options else "groq"
+    provider_name = st.selectbox("AI provider", options=provider_options, index=provider_options.index(current_provider))
+    st.session_state["provider_name"] = provider_name
+
+current_mode = st.session_state.get("selected_mode", "fix_syntax")
+if current_mode not in MODE_LABELS:
+    current_mode = "fix_syntax"
+
 mode = st.selectbox(
     "Mode",
     options=list(MODE_LABELS),
     format_func=MODE_LABELS.get,
+    index=list(MODE_LABELS.keys()).index(current_mode),
 )
+st.session_state["selected_mode"] = mode
 
 if mode == "history":
     st.header("Review history")

@@ -16,7 +16,8 @@ def test_language_detection_supports_recommended_extensions():
 def test_js_fallback_reports_possible_missing_semicolon(monkeypatch):
     monkeypatch.setattr("multilang.shutil.which", lambda name: None)
     result = check_source("let value = 1;\nconsole.log(value)", "main.js")
-    assert result["status"] == "clean"
+    assert result["status"] == "findings"
+    assert any(item["code"] == "JSLOG001" for item in result["findings"])
 
 
 def test_cpp_fallback_reports_possible_missing_semicolon(monkeypatch):
